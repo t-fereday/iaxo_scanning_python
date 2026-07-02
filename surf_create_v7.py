@@ -424,6 +424,16 @@ def surf_create(
     gPSDy   = np.zeros((imax, jmax))
     gsignal = np.zeros((imax, jmax))
 
+    # Scan (file) numbers aligned with the final, theta-sorted, kscan-trimmed grid.
+    # IDL mislabels these by pairing vscans(iscan) [file order] with gtheta(iscan)
+    # [theta-sorted order]; here we carry the mapping through both reorderings so the
+    # per-scan PSDx/PSDy panels show the correct scan number for each angle.
+    if vscans_local is not None:
+        _scan_ids_read = np.asarray(vscans_local[:nscans], dtype=int)
+    else:
+        _scan_ids_read = np.arange(1, nscans + 1, dtype=int)
+    gscan_ids = _scan_ids_read[ktheta][kscan]
+
     gtheta = gtheta[kscan]
     gz     = np.arange(jmax, dtype=float) * zstep + zmin
 
@@ -654,21 +664,33 @@ def surf_create(
     if not noplot:
         import matplotlib.pyplot as plt
 
-        # --- 3-D surface maps ---
-        fig, axes = plt.subplots(1, 3, figsize=(18, 6),
+        # --- 3-D surface maps (stacked vertically, wide panels — matches IDL) ---
+        # The surfaces occupy the left ~70% of the figure; each HPD annotation is
+        # placed in the reserved right-hand column so it never covers the surface.
+        fig, axes = plt.subplots(3, 1, figsize=(14, 11),
                                   subplot_kw={'projection': '3d'})
         fig.suptitle(f'{filename}: 3D surface profile')
+        fig.subplots_adjust(left=0.03, right=0.64, top=0.95, bottom=0.03, hspace=0.10)
         for surface_data, title, ax_3d in zip(
                 [gdr0[ia:ib+1, ja:jb+1],
                  gdr0_pr[ia:ib+1, ja:jb+1],
                  gdr0_br[ia:ib+1, ja:jb+1]],
                 ['Aligned Raw:', 'Aligned Phase Removed:', 'Aligned Bow Removed:'],
                 axes):
-            surf_plot(surface_data, gtheta[ia:ib+1], gz[ja:jb+1],
-                      title=title, r0=r0, metric=metric,
-                      focal=focal, convol=convol,
-                      ax=ax_3d, fig=fig)
-        plt.tight_layout()
+            # IDL hardcodes /convol on these 3-D surf_plot calls
+            # (surf_create_v7.pro:1088/1098/1106), so the annotation is ALWAYS the
+            # convol HPD regardless of the pipeline's convol flag. Match that here.
+            _, _, info = surf_plot(surface_data, gtheta[ia:ib+1], gz[ja:jb+1],
+                                   title=title, r0=r0, metric=metric,
+                                   focal=focal, convol=True,
+                                   ax=ax_3d, fig=fig, annotate=False)
+            if info:
+                ax_3d.text2D(1.03, 0.5, info, transform=ax_3d.transAxes,
+                             va='center', ha='left', family='monospace',
+                             fontsize=8, clip_on=False,
+                             bbox=dict(boxstyle='round,pad=0.5', facecolor='white',
+                                       edgecolor='black', linewidth=0.8))
+        # (subplots_adjust set above; tight_layout would fight the 3-D box zoom)
         plt.show()
 
         # --- 1-D axial profiles ---
@@ -685,6 +707,31 @@ def surf_create(
             ax_1d.set_title(title_1d)
         plt.tight_layout()
         plt.show()
+
+        # --- PSDx / PSDy per-scan panels (one panel per scan; ALL scans shown) ---
+        # Ported from IDL surf_create_v7.pro:1351-1435. IDL hardcodes a 5x6=30-panel
+        # grid (!p.multi=[0,5,6]), so a 31st scan overflows onto a new page that
+        # erases the window — leaving only the last panel visible. Here the grid grows
+        # to fit nscans, so every scan (including any phantom/zero scans) is shown.
+        for _psd_arr, _psd_label in [(gPSDx, 'PSDx'), (gPSDy, 'PSDy')]:
+            ncols = 5
+            nrows = int(np.ceil(imax / ncols))
+            figp, axesp = plt.subplots(nrows, ncols,
+                                       figsize=(ncols * 3.0, nrows * 2.2),
+                                       squeeze=False)
+            figp.suptitle(f'{filename}: {_psd_label}')
+            for i in range(imax):
+                axp = axesp[i // ncols][i % ncols]
+                axp.plot(gz[ja:jb+1] * UnitAx, _psd_arr[i, ja:jb+1] / 2.0)
+                axp.set_title(f'Scan {int(gscan_ids[i])}  '
+                              f'Angle {np.degrees(gtheta[i]):.1f}', fontsize=7)
+                axp.tick_params(labelsize=6)
+            for k in range(imax, nrows * ncols):       # blank unused cells
+                axesp[k // ncols][k % ncols].axis('off')
+            figp.supxlabel(f'Optical Axis [{LabAx}]')
+            figp.supylabel(f'{_psd_label} [mm]')
+            figp.tight_layout()
+            plt.show()
 
         # --- PSF histograms ---
         fig3, axes3 = plt.subplots(2, 2, figsize=(12, 10))
