@@ -58,7 +58,6 @@ Modification History:
 import glob
 import os
 import datetime
-import warnings
 import numpy as np
 import scipy.stats
 
@@ -74,14 +73,52 @@ from .surf_align         import surf_align
 from .surf_center        import surf_center
 from .surf_fit_axial     import surf_fit_axial
 from .half_width         import half_width
-from .surf_HPD           import surf_HPD
 from .surf_write         import surf_write
 from .surf_plot          import surf_plot
 from .hist1d             import hist1dfit
 
 
+# ---------------------------------------------------------------------------
+# VMfile (virtual-mounting) export directory.
+# Edit this path in the code to change where the VMfile export is written.
+# If left as None, the export goes into the scan-data folder.
+# (This is the code-level equivalent of IDL's hardcoded 'C:\IDL\...\SXD\' path.)
+VMFILE_DIR = '/Users/Thomas/Downloads/idl conversion/SXD/'
+# ---------------------------------------------------------------------------
+
+
 class DataError(Exception):
     """Raised when laser data is insufficient for analysis."""
+
+
+def _vm_sample_name(filename, r0):
+    """Build the virtual-mounting (VMfile) sample name.
+
+    Faithful port of the IDL string parsing in surf_create_v7.pro:979-1000
+    (IDL strmid with REVERSE_OFFSET translated to Python slicing). For e.g.
+    'scandata_06252026D18-260624-2' with r0=54 this returns
+    'A108AD18-001P0-U206252026-260624.sxd', matching the IDL output.
+    """
+    fn = filename
+    dia = int(round(r0 * 2))
+    if len(fn) > 17 and fn[17:18] == 'N':
+        if fn[-1] not in ('P', 'S'):
+            fn = fn[:-1]
+        man_dia = 'N' + str(dia)
+        run = fn[22:26]
+        layer = fn[fn.rfind('-') + 1:]
+        layer = ('0000' + layer)[-4:] + '0'
+        scan = 'C1'
+    else:
+        man_dia = 'A' + str(dia)
+        run = 'A' + fn[17:20]
+        if run[-1:] == '-':                       # rare edge case in the IDL logic
+            run = run[:2] + '0' + run[-2:-1]
+        layer = '001P0'
+        scandate = fn[9:17]
+        slumpdate = fn[len(fn) - 8:len(fn) - 2]
+        scan = 'U' + fn[-1] + scandate + '-' + slumpdate
+    return f"{man_dia}{run}-{layer}-{scan}.sxd"
 
 
 def surf_create(
@@ -132,6 +169,7 @@ def surf_create(
     extrascans=False,
     noformat=False,
     VMfile=False,
+    VMdir=None,
     quiet=False,
     focal=5200.0,
     convol=False,
@@ -691,7 +729,6 @@ def surf_create(
                              bbox=dict(boxstyle='round,pad=0.5', facecolor='white',
                                        edgecolor='black', linewidth=0.8))
         # (subplots_adjust set above; tight_layout would fight the 3-D box zoom)
-        plt.show()
 
         # --- 1-D axial profiles ---
         fig2, axes2 = plt.subplots(3, 1, figsize=(10, 12))
@@ -706,7 +743,6 @@ def surf_create(
             ax_1d.set_ylabel('Height [µm]')
             ax_1d.set_title(title_1d)
         plt.tight_layout()
-        plt.show()
 
         # --- PSDx / PSDy per-scan panels (one panel per scan; ALL scans shown) ---
         # Ported from IDL surf_create_v7.pro:1351-1435. IDL hardcodes a 5x6=30-panel
@@ -731,7 +767,6 @@ def surf_create(
             figp.supxlabel(f'Optical Axis [{LabAx}]')
             figp.supylabel(f'{_psd_label} [mm]')
             figp.tight_layout()
-            plt.show()
 
         # --- PSF histograms ---
         fig3, axes3 = plt.subplots(2, 2, figsize=(12, 10))
@@ -744,7 +779,7 @@ def surf_create(
             title='Raw Axial PSF (1B)', xtit=f'Slope [{LabSlope}]', ax=psf_ax[0])
         _, _, _, W50convol_raw, W70convol_raw = hist1dfit(
             gdrdz[ia:ib+1, ja:jb+1].ravel() * UnitSlope,
-            nbins1=200, nsigma=5.0, zero=True, convol=True,
+            nbins1=200, nsigma=5.0, zero=True, convol=True, king=True,
             title='Raw Axial PSF (2B)', xtit=f'Slope [{LabSlope}]', ax=psf_ax[2])
         _, _, _, W50convol_pr, W70convol_pr = hist1dfit(
             gdrdz_pr[ia:ib+1, ja:jb+1].ravel() * UnitSlope,
@@ -752,7 +787,7 @@ def surf_create(
             title='PR Axial PSF (1B)', xtit=f'Slope [{LabSlope}]', ax=psf_ax[1])
         x_hist_pr_2b, _, _, W50convol_pr, W70convol_pr = hist1dfit(
             gdrdz_pr[ia:ib+1, ja:jb+1].ravel() * UnitSlope,
-            nbins1=200, nsigma=5.0, zero=True, convol=True,
+            nbins1=200, nsigma=5.0, zero=True, convol=True, king=True,
             title='PR Axial PSF (2B)', xtit=f'Slope [{LabSlope}]', ax=psf_ax[3])
         # B-R reuses P-R's bin boundaries (matches IDL non-noplot path where
         # x_hist_pr_2b is already set when passed to the B-R hist1dfit call).
@@ -761,7 +796,6 @@ def surf_create(
             x_hist=x_hist_pr_2b,
             noplot=True, convol=True)
         plt.tight_layout()
-        plt.show()
 
         # --- Individual HPD vs theta ---
         fig4, axes4 = plt.subplots(3, 1, figsize=(8, 10))
@@ -775,7 +809,6 @@ def surf_create(
             ax_hpd.set_ylabel('2B HPD [arcsec]')
             ax_hpd.set_title(title_hpd)
         plt.tight_layout()
-        plt.show()
 
         # --- Fit parameters vs theta ---
         fig5, axes5 = plt.subplots(3, 1, figsize=(8, 10))
@@ -793,7 +826,6 @@ def surf_create(
         for ax_ in axes5:
             ax_.set_xlabel('Theta [deg]')
         plt.tight_layout()
-        plt.show()
 
     # ------------------------------------------------------------------
     # Write output
@@ -801,6 +833,20 @@ def surf_create(
     if not nowrite:
         outfile = os.path.join(outdir, os.path.basename(fileout) + '.sxd')
         surf_write(outfile, gdrdtheta, gdrdz, gsignal, gtheta, gz, gdr0, r0)
+
+    # VMfile: export the laser surface for the virtual-mounting simulation.
+    # Ported from IDL surf_create_v7.pro:979-1010 — saves the PHASE-REMOVED surface
+    # with theta doubled. Written in Python (.npz) via surf_write, to VMdir (a given
+    # location; defaults to the scan folder). Runs regardless of nowrite, matching IDL.
+    if VMfile:
+        vm_name = _vm_sample_name(os.path.basename(filename), r0)
+        # Location precedence: explicit VMdir arg > module-level VMFILE_DIR > scan folder
+        vm_dir = VMdir or VMFILE_DIR or indir
+        os.makedirs(vm_dir, exist_ok=True)
+        vm_outfile = os.path.join(vm_dir, vm_name)
+        surf_write(vm_outfile, gdrdtheta_pr, gdrdz_pr, gsignal,
+                   gtheta * 2.0, gz, gdr0_pr, r0)
+        print(f'laser surface saved to: {vm_outfile}.npz')
 
     # ------------------------------------------------------------------
     # Summary statistics
@@ -846,6 +892,13 @@ def surf_create(
         filedate_str = dt.strftime('%m/%d/%Y')
     else:
         filedate_str = ''
+
+    # Show all figures now — AFTER every terminal print above — so the HPD summary
+    # appears immediately and isn't gated behind closing the plot windows. The single
+    # blocking show displays all accumulated figures at once (plt was imported at the
+    # start of the plotting block above).
+    if not noplot:
+        plt.show()
 
     return dict(
         gdr0=gdr0, gdr0_pr=gdr0_pr, gdr0_br=gdr0_br,

@@ -138,32 +138,42 @@ def hist1dfit(hist, min1=None, max1=None, nbins1=None,
     W50convol = hpd_hist(x_hist, y_hist, 50)
     W70convol = hpd_hist(x_hist, y_hist, 70)
 
+    # PSF fitting — weighted exactly like IDL hist1dfit.pro (mpfitfun with
+    # y_err = sqrt(y_hist) floored at 1). Without the weighting, an unweighted fit
+    # over-weights the peak and gives a too-narrow king (wrong r/alpha). Fit runs
+    # regardless of noplot (as in IDL), so fit_output is always available.
     fit_output = None
     fit_curve  = None
+    chi_sq     = None
+    y_err = np.maximum(np.sqrt(np.abs(y_hist)), 1.0)
 
-    if king and not noplot:
+    if king:
         try:
             p0 = [np.max(y_hist), 0.0, 20.0, 1.0]
-            popt, _ = curve_fit(_fit_king_scipy, x_hist, y_hist,
-                                 p0=p0, maxfev=5000,
-                                 bounds=([0, -np.inf, 0, 0],
+            popt, _ = curve_fit(_fit_king_scipy, x_hist, y_hist, p0=p0,
+                                 sigma=y_err, absolute_sigma=True, maxfev=5000,
+                                 bounds=([-np.inf, -np.inf, 0.0, 0.0],
                                          [np.inf, np.inf, np.inf, 10.0]))
             fit_output = popt
             fit_curve  = _fit_king_scipy(x_hist, *popt)
+            chi_sq = np.sum(((y_hist - fit_curve) / y_err) ** 2) / (len(x_hist) - len(p0))
         except Exception:
             pass
 
-    if gauss and not noplot:
+    if gauss:
         try:
-            p0 = [np.max(y_hist), 0.0, std]
-            popt, _ = curve_fit(_fit_gauss, x_hist, y_hist, p0=p0, maxfev=5000)
+            p0 = [np.max(y_hist), 0.0, std if std > 0 else 1.0]
+            popt, _ = curve_fit(_fit_gauss, x_hist, y_hist, p0=p0,
+                                 sigma=y_err, absolute_sigma=True, maxfev=5000)
             fit_output = popt
             fit_curve  = _fit_gauss(x_hist, *popt)
+            chi_sq = np.sum(((y_hist - fit_curve) / y_err) ** 2) / (len(x_hist) - len(p0))
         except Exception:
             pass
 
     if not noplot:
         import matplotlib.pyplot as plt
+        import scipy.stats as _stats
         if ax is None:
             fig, ax = plt.subplots()
 
@@ -177,12 +187,28 @@ def hist1dfit(hist, min1=None, max1=None, nbins1=None,
             ax.set_title(title)
 
         if not noinfo:
-            info = [f"W50 = {W50convol:.1f}", f"W70 = {W70convol:.1f}"]
+            # Annotation matches IDL hist1dfit.pro:211-252 (Events/Nbins, then
+            # skewness/kurtosis for non-convol or W50/W70 for convol, then the
+            # king (r/alpha/Chisq) or gauss (x0/sigma/A0/Chisq) fit params).
+            info = [f"Events: {int(round(np.sum(y_hist)))}", f"Nbins: {len(x_hist)}"]
+            if convol:
+                info += [f'W50 = {W50convol:.1f}"', f'W70 = {W70convol:.1f}"']
+            else:
+                info += [f"skewness = {_stats.skew(hist1):.2f}",
+                         f"kurtosis = {_stats.kurtosis(hist1):.2f}"]
             if king and fit_output is not None:
-                info += [f"r = {fit_output[2]:.2f}", f"α = {fit_output[3]:.1f}"]
+                info += [f"r = {fit_output[2]:.2f}",
+                         f"alpha = {fit_output[3]:.1f}",
+                         f"Chisq = {chi_sq:.1f}"]
             if gauss and fit_output is not None:
-                info += [f"σ = {fit_output[2]:.2f}"]
-            ax.text(0.98, 0.95, '\n'.join(info),
-                    transform=ax.transAxes, ha='right', va='top', fontsize=8)
+                info += [f"x0 = {fit_output[1]:.2f}",
+                         f"sigma = {fit_output[2]:.2f}",
+                         f"A0 = {fit_output[0]:.1f}",
+                         f"Chisq = {chi_sq:.1f}"]
+            ax.text(0.97, 0.97, '\n'.join(info),
+                    transform=ax.transAxes, ha='right', va='top', fontsize=7,
+                    family='monospace',
+                    bbox=dict(boxstyle='square,pad=0.3', facecolor='white',
+                              edgecolor='black', linewidth=0.6))
 
     return x_hist, y_hist, fit_output, W50convol, W70convol
