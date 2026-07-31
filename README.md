@@ -20,8 +20,8 @@ Python 3 with `numpy`, `scipy`, `matplotlib`.
 
 ## 1. Surface reconstruction
 
-The scanner measures the surface *slope*, not its height, so the pipeline
-integrates the slopes back into a height map, then removes the per-scan offsets
+The pipeline
+integrates the scanned slopes back into a height map, then removes the per-scan offsets
 and misalignments that integration exposes.
 
 Point it at a scan folder (the folder and scan name are usually the same — all
@@ -36,14 +36,11 @@ Add `--VMfile` to also export the surface for the mount simulation. Output goes
 to `SXD/` as `.sxd.npz`. Useful flags: `--r0` (shell radius, mm), `--zmin/--zmax`,
 `--nocal`, `--noplot`. Run with `-h` for the full list.
 
-Calibration files, if you have them, go in `calibration/`. Without them the run
-still completes — it warns and uses a zero baseline.
+Calibration files, if you have them and are using them, go in `calibration/`. Optional.
 
 ## 2. Virtual mounting
 
-Simulates gluing the shell onto five graphite spacers: the glass flexes to meet
-them, and the resulting figure error sets the optic's Half-Power Diameter
-(HPD, in arcsec — smaller is sharper).
+Simulates gluing the shell onto five graphite spacers.
 
 ```bash
 python3 run_virtual_mount.py vmexample/A115AD13-001P0-U307162026-260618.sxd
@@ -59,19 +56,3 @@ interactively. Options:
 - `--r0`, `--layer`, `--focal` — override values parsed from the filename
 - `--seed` — reproducible spacer error
 
-### A note on randomness
-
-The spacers aren't perfectly flat, so the simulation draws a random figure error
-for each one. It's **unseeded by default**, matching the IDL, so the
-*Mount High Pass* and *Mounted* panels vary slightly run to run. The other four
-panels are deterministic. Use `--seed` for a repeatable result.
-
-## Comparing against the original IDL
-
-`idl_out/` holds a harness that runs the original IDL routines and diffs them
-against this port. It needs IDL and a copy of the lab's `user_contrib` tree
-(not included — not ours to redistribute); point `IAXO_IDL` at it and `IDL_BIN`
-at your IDL binary.
-
-Agreement on the shells tested is ~0.7% mean difference in HPD, the residual
-coming from the beam-deflection solve (IDL `SVDC/SVSOL` vs numpy `lstsq`).
