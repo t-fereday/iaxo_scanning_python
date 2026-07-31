@@ -1,0 +1,40 @@
+# --- third-party / lab IDL source (not ours to redistribute) ---------------
+# The Python port is validated against these, but they belong to their authors:
+#   saudi/, XRC/  - J. Koglin, Columbia Astrophysics Laboratory
+#   cmtotal/      - C. Markwardt, MPFIT (ships its own LICENSE.RSI)
+#   astron/       - IDL Astronomy User's Library
+#   windt/        - D. Windt
+# Point IAXO_IDL at your own copy to run the IDL comparison.
+IDL from Jason/
+saudi-2/
+saudi_original/
+C:\\*/
+
+# --- generated output -------------------------------------------------------
+py_out/
+pptx_build/
+SXD/
+idl_out/shells/
+idl_out/*.ps
+idl_out/*.sxd
+idl_out/*.sav
+idl_out/*.csv
+idl_out/*drraw3.txt
+docs/*.pdf
+
+# keep the worked example so the pipeline can be run end-to-end
+!vmexample/
+
+# --- python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# --- editor / OS ------------------------------------------------------------
+.DS_Store
+.vscode/
+.idea/
+*.swp
+vmexample/*.zip

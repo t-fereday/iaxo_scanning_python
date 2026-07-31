@@ -9,7 +9,7 @@ Usage:
 
 Example:
     python3 run_surf_create.py \
-        /Users/Thomas/Downloads/scandata_06252026D18-260624-2/scandata_06252026D18-260624-2 \
+        ~/scans/scandata_06252026D18-260624-2/scandata_06252026D18-260624-2 \
         --r0 54 --zmin -76 --zmax 36 --scanrange 3 33 --zfix --nofilter --nocal
 """
 
@@ -55,7 +55,9 @@ parser.add_argument('--noplot',   action='store_true', help='Skip 3D surface plo
 parser.add_argument('--nowrite',  action='store_true', help='Skip .npz output')
 parser.add_argument('--convol',   action='store_true', help='Use 2-bounce convolution for HPD')
 parser.add_argument('--fitdeg',   type=int, default=2, help='Axial polynomial degree (default: 2)')
-parser.add_argument('--VMfile',   action='store_true', help='VMfile mode')
+parser.add_argument('--VMfile',   action='store_true',
+                    help='Export laser surface for the virtual-mounting sim '
+                         '(written to SXD/; see VMFILE_DIR in surf_create_v7.py)')
 parser.add_argument('--quiet',    action='store_true', help='Suppress verbose output')
 
 args = parser.parse_args()
