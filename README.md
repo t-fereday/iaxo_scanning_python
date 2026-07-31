@@ -1,10 +1,14 @@
-This is a conversion from IDL scanning code to Python
+# iaxo_scanning_python
 
-Usage: Create a folder (default name: saudi_py) and insert all files except run_surf_create.
-Then run run_surf_create.
+A Python port of the IDL laser-scanner analysis used for IAXO / BabyIAXO X-ray
+optics. It reconstructs a mirror shell's surface from laser-scanner data and
+simulates how that shell deforms once it's mounted on spacers.
 
-packages used:
+Original IDL by Jason Koglin (Columbia Astrophysics Laboratory).
 
-numpy
-scipy
-matplotlib
+## Requirements
+
+Python 3 with `numpy`, `scipy`, `matplotlib`.
+
+## Layout
+
